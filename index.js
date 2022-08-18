@@ -1,76 +1,109 @@
 const fs = require("fs");
 const csvParser = require("csv-parser");
-
+const prompt = require("prompt");
+const headers = ["id", "area", "productName", "quantity", "brand"];
 const inputFolder = "inputFiles";
 const outputFolder = "outputFiles";
-const inputFileName = "input_example.csv" //"order_log00.csv";
-const headers = ["id", "area", "productName", "quantity", "brand"];
 
-const productsQuantityMappedByProductName = {};
-let totalOrders = 0;
 
-const readStream = fs
-  .createReadStream(`${inputFolder}/${inputFileName}`)
-  .on("error", (error) => {
-    console.log(error.message);
-  });
+createInputAndOutputFolderIfNotExist();
 
-readStream
-  .pipe(csvParser({ headers }))
-  .on("data", (record) => {
-    const { quantity, productName, brand } = record;
+const properties = [
+  {
+    name: "fileName",
+    validator: /^[a-zA-Z0-9\s-_]+.csv$/,
+    warning: "fileName must a valid csv file e.g. input_file_name.csv",
+  },
+];
 
-    if (!productsQuantityMappedByProductName[productName]) {
-      productsQuantityMappedByProductName[productName] = {
-        quantity: 0,
-        ordersByBrand: {},
-      };
-    }
+prompt.start();
 
-    if (
-      !productsQuantityMappedByProductName[productName].ordersByBrand[brand]
-    ) {
-      productsQuantityMappedByProductName[productName].ordersByBrand[brand] = 0;
-    }
+prompt.get(properties, function (err, result) {
+  if (err) {
+    console.log(err.message);
+    process.exit(0);
+  }
 
-    productsQuantityMappedByProductName[productName].ordersByBrand[brand] += 1;
+  const inputFileName = result.fileName;
 
-    productsQuantityMappedByProductName[productName].quantity +=
-      parseInt(quantity);
+  const productsQuantityMappedByProductName = {};
+  let totalOrders = 0;
 
-    totalOrders += 1;
-  })
-  .on("end", () => {
-    const outputFile1WritableStream = fs.createWriteStream(
-      `${outputFolder}/0_${inputFileName}`
-    );
-    const outputFile2WritableStream = fs.createWriteStream(
-      `${outputFolder}/1_${inputFileName}`
-    );
+  const readStream = fs
+    .createReadStream(`${inputFolder}/${inputFileName}`)
+    .on("error", (error) => {
+      console.log(error.message);
+    });
 
-    for ([productName, productStats] of Object.entries(
-      productsQuantityMappedByProductName
-    )) {
-      outputFile1WritableStream.write(
-        `${productName},${productStats.quantity / totalOrders}\n`
-      );
+  readStream
+    .pipe(csvParser({ headers }))
+    .on("data", (record) => {
+      const { quantity, productName, brand } = record;
 
-      let popularBrand = null;
-      let maxOrdersForTheBrand = 0;
-      for ([brand, numberOfOrders] of Object.entries(
-        productStats.ordersByBrand
-      )) {
-        if (maxOrdersForTheBrand < numberOfOrders) {
-          maxOrdersForTheBrand = numberOfOrders;
-          popularBrand = brand;
-        }
+      if (!productsQuantityMappedByProductName[productName]) {
+        productsQuantityMappedByProductName[productName] = {
+          quantity: 0,
+          ordersByBrand: {},
+        };
       }
 
-      outputFile2WritableStream.write(`${productName},${popularBrand}\n`);
-    }
+      if (
+        !productsQuantityMappedByProductName[productName].ordersByBrand[brand]
+      ) {
+        productsQuantityMappedByProductName[productName].ordersByBrand[
+          brand
+        ] = 0;
+      }
 
-    console.log(`Files have been written to disk successfully you can find them inside "${outputFolder}" folder`)
-  })
-  .on("error", (error) => {
-    console.log(error.message);
-  });
+      productsQuantityMappedByProductName[productName].ordersByBrand[
+        brand
+      ] += 1;
+
+      productsQuantityMappedByProductName[productName].quantity +=
+        parseInt(quantity);
+
+      totalOrders += 1;
+    })
+    .on("end", () => {
+      const outputFile1WritableStream = fs.createWriteStream(
+        `${outputFolder}/0_${inputFileName}`,
+      );
+      const outputFile2WritableStream = fs.createWriteStream(
+        `${outputFolder}/1_${inputFileName}`
+      );
+
+      for ([productName, productStats] of Object.entries(
+        productsQuantityMappedByProductName
+      )) {
+        outputFile1WritableStream.write(
+          `${productName},${productStats.quantity / totalOrders}\n`
+        );
+
+        let popularBrand = null;
+        let maxOrdersForTheBrand = 0;
+        for ([brand, numberOfOrders] of Object.entries(
+          productStats.ordersByBrand
+        )) {
+          if (maxOrdersForTheBrand < numberOfOrders) {
+            maxOrdersForTheBrand = numberOfOrders;
+            popularBrand = brand;
+          }
+        }
+
+        outputFile2WritableStream.write(`${productName},${popularBrand}\n`);
+      }
+
+      console.log(
+        `Files have been written to disk successfully you can find them inside "${outputFolder}" folder`
+      );
+    })
+    .on("error", (error) => {
+      console.log(error.message);
+    });
+});
+
+function createInputAndOutputFolderIfNotExist() {
+  fs.mkdirSync(inputFolder, { recursive: true });
+  fs.mkdirSync(outputFolder, { recursive: true });
+}
+
